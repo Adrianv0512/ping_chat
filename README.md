@@ -32,6 +32,8 @@ The sender should accept user input from the terminal rather than using a hardco
 
 ## Build & Run
 
+TODO: Create Makefile
+
 ```bash
 # Compile
 clang test_sender.c -o test_sender

@@ -16,7 +16,30 @@ struct icmp_header {
 };
 
 int main(int argc, char *argv[]) {
+  char *payload = NULL;
+  char *ip = NULL;
 
+  // load arguments
+  int option;
+  while ((option = getopt(argc, argv, "i:m:")) != -1) {
+    switch (option) {
+      case 'i':
+        ip = optarg;
+        break;
+      case 'm':
+        payload = optarg;
+        break;
+      case '?':
+        // our arguments are going to be ./test_sender -i ipaddress -m "message" (optional arguments)
+        printf("Useage (Optional Arguments): ./test_sender -i ipaddress -m \"message\"");
+        return 1;
+    }
+  }
+  // if no arguments were provided, these are the default values
+  if (payload == NULL) payload = "Hello from Ping Chat!";
+  if (ip == NULL) ip = "127.0.0.1";
+
+  // rest of function
   int sock = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
   printf("%d\n", sock);
   printf("%s\n", strerror(errno));
@@ -29,12 +52,11 @@ int main(int argc, char *argv[]) {
   icmp->seq = htons(1);
   icmp->checksum = 0;
 
-  char *payload = "Hello from Ping Chat!";
   memcpy(buffer + sizeof(struct icmp_header), payload, strlen(payload));
 
 
   struct sockaddr_in dest = { .sin_family = AF_INET };
-  inet_pton(AF_INET, "127.0.0.1", &dest.sin_addr);
+  inet_pton(AF_INET, ip, &dest.sin_addr);
   sendto(sock, buffer, sizeof(struct icmp_header) + strlen(payload), 0,
        (struct sockaddr *)&dest, sizeof(dest));
 
