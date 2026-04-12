@@ -13,7 +13,9 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-static int build_and_send(int sock,
+#include "sender.h"
+
+int build_and_send(int sock,
                           const struct sockaddr_in *dest,
                           const char *message,
                           uint16_t seq)
@@ -65,37 +67,22 @@ static int build_and_send(int sock,
 }
 
 //AI GENERATED USAGE PRINT STATEMENT
-static void usage(const char *prog)
-{
-    fprintf(stderr,
-            "Usage: %s [-i dest_ip] [-m message]\n"
-            "  -i  destination IP  (default: 127.0.0.1)\n"
-            "  -m  message to send (if omitted, reads from stdin)\n"
-            "Requires root (raw socket).\n",
-            prog);
-}
+// static void usage(const char *prog)
+// {
+//     fprintf(stderr,
+//             "Usage: %s [-i dest_ip] [-m message]\n"
+//             "  -i  destination IP  (default: 127.0.0.1)\n"
+//             "  -m  message to send (if omitted, reads from stdin)\n"
+//             "Requires root (raw socket).\n",
+//             prog);
+// }
 
-int main(int argc, char *argv[])
-{
-    const char *dest_ip  = "127.0.0.1";
-    const char *one_shot = NULL;        
-
-    int opt;
-    while ((opt = getopt(argc, argv, "i:m:")) != -1) {
-        switch (opt) {
-        case 'i': dest_ip  = optarg; break;
-        case 'm': one_shot = optarg; break;
-        default:
-            usage(argv[0]);
-            return 1;
-        }
-    }
-
+int send_messages(const char* dest_ip, const char* one_shot) {
     int sock = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
     if (sock < 0) {
         fprintf(stderr, "socket: %s  (are you running as root?)\n",
                 strerror(errno));
-        return 1;
+        exit(1);
     }
 
     struct sockaddr_in dest;
@@ -104,7 +91,7 @@ int main(int argc, char *argv[])
     if (inet_pton(AF_INET, dest_ip, &dest.sin_addr) != 1) {
         fprintf(stderr, "Invalid destination IP: %s\n", dest_ip);
         close(sock);
-        return 1;
+        exit(1);
     }
 
     uint16_t seq = 1;
@@ -112,14 +99,17 @@ int main(int argc, char *argv[])
     if (one_shot) {
         int rc = build_and_send(sock, &dest, one_shot, seq);
         close(sock);
-        return rc == 0 ? 0 : 1;
+        exit(rc);
     }
 
     printf("Ping-Chat sender ready. Type a message and press Enter.\n");
-    printf("Sending to %s  (Ctrl-D to quit)\n\n", dest_ip);
+    printf("Sending to %s  (Ctrl-D or type QUIT to quit)\n\n", dest_ip);
 
     char line[MAX_PAYLOAD + 2];  
     while (fgets(line, sizeof(line), stdin)) {
+        if (strcmp(line, "QUIT\n") == 0) {
+            break;
+        }
         size_t len = strlen(line);
         if (len > 0 && line[len - 1] == '\n')
             line[--len] = '\0';
@@ -134,3 +124,23 @@ int main(int argc, char *argv[])
     close(sock);
     return 0;
 }
+
+// int main(int argc, char *argv[])
+// {
+//     const char *dest_ip  = "127.0.0.1";
+//     const char *one_shot = NULL;        
+
+//     int opt;
+//     while ((opt = getopt(argc, argv, "i:m:")) != -1) {
+//         switch (opt) {
+//         case 'i': dest_ip  = optarg; break;
+//         case 'm': one_shot = optarg; break;
+//         default:
+//             usage(argv[0]);
+//             return 1;
+//         }
+//     }
+
+//     send_messages(dest_ip, one_shot);
+//     return 0;
+// }
