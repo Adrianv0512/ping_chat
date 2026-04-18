@@ -3,13 +3,17 @@ CFLAGS = -Wall -Wextra -std=c11 -O2
 
 .PHONY: all clean
 
-all: sender receiver
+# all: chat sender receiver
+all: chat
 
-sender: sender.c protocol.h
-	$(CC) $(CFLAGS) -o $@ sender.c
+chat: chat.c sender.c receiver.c
+	$(CC) $(CFLAGS) -o $@ chat.c sender.c receiver.c
 
-receiver: receiver.c protocol.h
-	$(CC) $(CFLAGS) -o $@ receiver.c
+# sender: sender.c protocol.h sender.h
+# 	$(CC) $(CFLAGS) -o $@ sender.c
+
+# receiver: receiver.c protocol.h receiver.h
+# 	$(CC) $(CFLAGS) -o $@ receiver.c
 
 clean:
-	rm -f sender receiver
+	rm -f chat sender receiver

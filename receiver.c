@@ -15,17 +15,17 @@
 #include <netinet/ip.h>  
 #include <arpa/inet.h>
 
+#include "receiver.h"
 
 #define RECV_BUF \
     (60 + (int)sizeof(struct icmp_header) + (int)sizeof(struct pc_header) + MAX_PAYLOAD)
 
-int main(void)
-{
+int read_messages() {
     int sock = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
     if (sock < 0) {
         fprintf(stderr, "socket: %s  (are you running as root?)\n",
                 strerror(errno));
-        return 1;
+        exit(1);
     }
 
     printf("Ping-Chat receiver listening... (Ctrl-C to stop)\n\n");
@@ -109,3 +109,8 @@ int main(void)
     close(sock);
     return 0;
 }
+// int main(void)
+// {
+//     read_messages();
+//     return 0;
+// }
