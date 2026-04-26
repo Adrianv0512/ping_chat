@@ -14,8 +14,12 @@
 #include <netinet/in.h>
 #include <netinet/ip.h>  
 #include <arpa/inet.h>
+#include <readline/readline.h>
 
 #include "receiver.h"
+#include "crypto.h"
+
+extern uint8_t g_key[32];
 
 #define RECV_BUF \
     (60 + (int)sizeof(struct icmp_header) + (int)sizeof(struct pc_header) + MAX_PAYLOAD)
@@ -90,20 +94,30 @@ int read_messages() {
         const uint8_t *raw_payload =
             buf + ip_hlen + sizeof(*icmp) + sizeof(*pch);
 
-        char message[MAX_PAYLOAD + 1];
-        memcpy(message, raw_payload, payload_len);
-        message[payload_len] = '\0';
+        uint8_t decrypted[MAX_PAYLOAD + 1];
+        int pt_len = my_decrypt(raw_payload, payload_len, g_key, decrypted);
+        if (pt_len <= 0) {
+            fprintf(stderr, "Decryption failed (payload_len=%d, pt_len=%d)\n",
+            payload_len, pt_len);
+            continue;
+        }
+        decrypted[pt_len] = '\0';
+        char *message = (char *)decrypted;
 
+        
         time_t now = time(NULL);
-        char ts[9];  
-        strftime(ts, sizeof(ts), "%H:%M:%S", localtime(&now));
+        char ts[12];
+        strftime(ts, sizeof(ts), "%I:%M:%S %p", localtime(&now));
 
-        printf("[%s] %s (seq %u): %s\n",
+        printf("\r\033[K"); 
+        printf("\033[36m[%s] %s: %s\033[0m\n",
                ts,
                inet_ntoa(src.sin_addr),
-               ntohs(pch->seq_num),
                message);
         fflush(stdout);
+
+        rl_on_new_line();   
+        rl_redisplay();     
     }
 
     close(sock);

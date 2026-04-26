@@ -8,12 +8,19 @@
 #include <stdint.h>
 #include <unistd.h>
 #include <errno.h>
+#include <time.h>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
 #include "sender.h"
+#include "crypto.h"
+
+#include <readline/readline.h>
+#include <readline/history.h>
+
+extern uint8_t g_key[32];
 
 int build_and_send(int sock,
                           const struct sockaddr_in *dest,
@@ -49,10 +56,13 @@ int build_and_send(int sock,
     pch->frag_index  = htons(0);
     pch->payload_len = htons((uint16_t)msg_len);
 
-    memcpy(payload, message, msg_len);
 
-    int icmp_total = (int)(sizeof(*icmp) + sizeof(*pch) + msg_len);
-    icmp->checksum = compute_checksum(buf, icmp_total);
+
+    uint8_t ciphertext[MAX_PAYLOAD];
+    int ct_len = my_encrypt((uint8_t *)message, (int)msg_len, g_key, ciphertext);
+    memcpy(payload, ciphertext, ct_len);
+    pch->payload_len = htons((uint16_t)ct_len); 
+    int icmp_total = (int)(sizeof(*icmp) + sizeof(*pch) + ct_len);
 
 
     ssize_t sent = sendto(sock, buf, (size_t)icmp_total, 0,
@@ -62,20 +72,12 @@ int build_and_send(int sock,
         return -1;
     }
 
-    printf("Sent %zu bytes to %s\n", msg_len, inet_ntoa(dest->sin_addr));
+    time_t now = time(NULL);
+    char ts[12];
+    strftime(ts, sizeof(ts), "%I:%M:%S %p", localtime(&now));
+    printf("\033[32m[%s] You: %s\033[0m\n", ts, message); 
     return 0;
 }
-
-//AI GENERATED USAGE PRINT STATEMENT
-// static void usage(const char *prog)
-// {
-//     fprintf(stderr,
-//             "Usage: %s [-i dest_ip] [-m message]\n"
-//             "  -i  destination IP  (default: 127.0.0.1)\n"
-//             "  -m  message to send (if omitted, reads from stdin)\n"
-//             "Requires root (raw socket).\n",
-//             prog);
-// }
 
 int send_messages(const char* dest_ip, const char* one_shot) {
     int sock = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
@@ -105,19 +107,20 @@ int send_messages(const char* dest_ip, const char* one_shot) {
     printf("Ping-Chat sender ready. Type a message and press Enter.\n");
     printf("Sending to %s  (Ctrl-D or type QUIT to quit)\n\n", dest_ip);
 
-    char line[MAX_PAYLOAD + 2];  
-    while (fgets(line, sizeof(line), stdin)) {
-        if (strcmp(line, "QUIT\n") == 0) {
+
+    char *line;
+    while ((line = readline(">> ")) != NULL) {
+        if (strcmp(line, "QUIT") == 0) {
+            free(line);
             break;
         }
-        size_t len = strlen(line);
-        if (len > 0 && line[len - 1] == '\n')
-            line[--len] = '\0';
-
-        if (len == 0)
-            continue;  
-
+        if (strlen(line) == 0) {
+            free(line);
+            continue;
+        }
+        add_history(line);
         build_and_send(sock, &dest, line, seq++);
+        free(line);
     }
 
     printf("Goodbye.\n");
@@ -125,22 +128,3 @@ int send_messages(const char* dest_ip, const char* one_shot) {
     return 0;
 }
 
-// int main(int argc, char *argv[])
-// {
-//     const char *dest_ip  = "127.0.0.1";
-//     const char *one_shot = NULL;        
-
-//     int opt;
-//     while ((opt = getopt(argc, argv, "i:m:")) != -1) {
-//         switch (opt) {
-//         case 'i': dest_ip  = optarg; break;
-//         case 'm': one_shot = optarg; break;
-//         default:
-//             usage(argv[0]);
-//             return 1;
-//         }
-//     }
-
-//     send_messages(dest_ip, one_shot);
-//     return 0;
-// }

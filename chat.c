@@ -7,6 +7,7 @@
 
 #include "sender.h"
 #include "receiver.h"
+#include "crypto.h"
 
 //AI GENERATED USAGE PRINT STATEMENT
 static void usage(const char *prog)
@@ -24,6 +25,8 @@ void* receive(void*) {
     return NULL;
 }
 
+uint8_t g_key[32];
+
 int main(int argc, char* argv[]) {
     const char *dest_ip  = "127.0.0.1";
     const char *one_shot = NULL;        
@@ -37,6 +40,11 @@ int main(int argc, char* argv[]) {
             usage(argv[0]);
             return 1;
         }
+    }
+
+    if (load_key("chat.key", g_key) != 0) {
+        fprintf(stderr, "Failed to load key \n");
+        return 1;
     }
 
     pthread_t tid;
