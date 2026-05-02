@@ -12,14 +12,15 @@ A terminal chat app that hides encrypted messages inside ICMP Echo Request packe
 - **AES-256-ECB encryption** — payloads are encrypted via OpenSSL's EVP API using a pre-shared 32-byte key; captured packets show only ciphertext in Wireshark
 - **Full-duplex** — send and receive simultaneously using pthreads; no need to run separate programs
 - **Readline integration** — arrow-key history, line editing, and a clean `>>` prompt via libreadline
-- **Colored output** — your messages in green, incoming messages in cyan
+- **Colored output** — your messages in green, incoming messages in cyan - fancy TUI.
 ## Dependencies
  
 - GCC
 - OpenSSL (`libssl-dev`)
 - Readline (`libreadline-dev`)
+- NCurses (`libncurses-dev`)
 ```bash
-sudo apt install libssl-dev libreadline-dev
+sudo apt install libssl-dev libreadline-dev libncurses-dev
 ```
  
 ## Build
