@@ -12,12 +12,12 @@
 
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <netinet/ip.h>  
+#include <netinet/ip.h>
 #include <arpa/inet.h>
-#include <readline/readline.h>
 
 #include "receiver.h"
 #include "crypto.h"
+#include "ui.h"
 
 extern uint8_t g_key[32];
 
@@ -27,12 +27,14 @@ extern uint8_t g_key[32];
 int read_messages() {
     int sock = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
     if (sock < 0) {
-        fprintf(stderr, "socket: %s  (are you running as root?)\n",
-                strerror(errno));
-        exit(1);
+        char err[160];
+        snprintf(err, sizeof(err),
+                 "recv socket: %s (run as root)", strerror(errno));
+        ui_push_message(UI_MSG_ERR, NULL, err);
+        return 1;
     }
 
-    printf("Ping-Chat receiver listening... (Ctrl-C to stop)\n\n");
+    ui_push_message(UI_MSG_SYS, NULL, "listening for ICMP messages");
 
     uint8_t buf[RECV_BUF];
     struct sockaddr_in src;
@@ -47,7 +49,9 @@ int read_messages() {
         if (bytes < 0) {
             if (errno == EINTR)
                 continue;
-            fprintf(stderr, "recvfrom: %s\n", strerror(errno));
+            char err[128];
+            snprintf(err, sizeof(err), "recvfrom: %s", strerror(errno));
+            ui_push_message(UI_MSG_ERR, NULL, err);
             continue;
         }
 
@@ -66,15 +70,14 @@ int read_messages() {
         if (icmp->type != 8)
             continue;
 
-        //checking for our magic number
         if (bytes < (ssize_t)(ip_hlen + sizeof(*icmp) + sizeof(struct pc_header)))
-            continue; 
+            continue;
 
         const struct pc_header *pch =
             (const struct pc_header *)(buf + ip_hlen + sizeof(*icmp));
 
         if (ntohs(pch->magic) != PC_MAGIC)
-            continue; 
+            continue;
 
         uint16_t payload_len = ntohs(pch->payload_len);
 
@@ -83,13 +86,16 @@ int read_messages() {
                                    + sizeof(*pch)
                                    + payload_len);
         if (bytes < needed) {
-            fprintf(stderr, "Warning: truncated packet from %s — skipping\n",
-                    inet_ntoa(src.sin_addr));
+            char err[128];
+            snprintf(err, sizeof(err),
+                     "truncated packet from %s — skipping",
+                     inet_ntoa(src.sin_addr));
+            ui_push_message(UI_MSG_ERR, NULL, err);
             continue;
         }
 
         if (payload_len > MAX_PAYLOAD)
-            payload_len = MAX_PAYLOAD;   
+            payload_len = MAX_PAYLOAD;
 
         const uint8_t *raw_payload =
             buf + ip_hlen + sizeof(*icmp) + sizeof(*pch);
@@ -97,34 +103,21 @@ int read_messages() {
         uint8_t decrypted[MAX_PAYLOAD + 1];
         int pt_len = my_decrypt(raw_payload, payload_len, g_key, decrypted);
         if (pt_len <= 0) {
-            fprintf(stderr, "Decryption failed (payload_len=%d, pt_len=%d)\n",
-            payload_len, pt_len);
+            char err[96];
+            snprintf(err, sizeof(err),
+                     "decryption failed (ct=%d, pt=%d)",
+                     payload_len, pt_len);
+            ui_push_message(UI_MSG_ERR, NULL, err);
             continue;
         }
         decrypted[pt_len] = '\0';
-        char *message = (char *)decrypted;
 
-        
-        time_t now = time(NULL);
-        char ts[12];
-        strftime(ts, sizeof(ts), "%I:%M:%S %p", localtime(&now));
-
-        printf("\r\033[K"); 
-        printf("\033[36m[%s] %s: %s\033[0m\n",
-               ts,
-               inet_ntoa(src.sin_addr),
-               message);
-        fflush(stdout);
-
-        rl_on_new_line();   
-        rl_redisplay();     
+        ui_push_message(UI_MSG_PEER,
+                        inet_ntoa(src.sin_addr),
+                        (const char *)decrypted);
+        ui_stat_recv((size_t)bytes);
     }
 
     close(sock);
     return 0;
 }
-// int main(void)
-// {
-//     read_messages();
-//     return 0;
-// }

@@ -16,9 +16,7 @@
 
 #include "sender.h"
 #include "crypto.h"
-
-#include <readline/readline.h>
-#include <readline/history.h>
+#include "ui.h"
 
 extern uint8_t g_key[32];
 
@@ -34,8 +32,10 @@ int build_and_send(int sock,
 
     size_t msg_len = strlen(message);
     if (msg_len > MAX_PAYLOAD) {
-        fprintf(stderr, "Message too long — truncating to %d bytes\n",
-                MAX_PAYLOAD);
+        char err[64];
+        snprintf(err, sizeof(err),
+                 "message too long, truncating to %d bytes", MAX_PAYLOAD);
+        ui_push_message(UI_MSG_ERR, NULL, err);
         msg_len = MAX_PAYLOAD;
     }
 
@@ -49,51 +49,52 @@ int build_and_send(int sock,
     icmp->seq      = htons(seq);
     icmp->checksum = 0;
 
-    pch->magic       = htons(PC_MAGIC);   
+    pch->magic       = htons(PC_MAGIC);
     pch->msg_type    = PC_MSG_TEXT;
     pch->seq_num     = htons(seq);
-    pch->frag_count  = htons(1);          
+    pch->frag_count  = htons(1);
     pch->frag_index  = htons(0);
     pch->payload_len = htons((uint16_t)msg_len);
-
-
 
     uint8_t ciphertext[MAX_PAYLOAD];
     int ct_len = my_encrypt((uint8_t *)message, (int)msg_len, g_key, ciphertext);
     memcpy(payload, ciphertext, ct_len);
-    pch->payload_len = htons((uint16_t)ct_len); 
+    pch->payload_len = htons((uint16_t)ct_len);
     int icmp_total = (int)(sizeof(*icmp) + sizeof(*pch) + ct_len);
-
 
     ssize_t sent = sendto(sock, buf, (size_t)icmp_total, 0,
                           (const struct sockaddr *)dest, sizeof(*dest));
     if (sent < 0) {
-        fprintf(stderr, "sendto: %s\n", strerror(errno));
+        char err[128];
+        snprintf(err, sizeof(err), "sendto: %s", strerror(errno));
+        ui_push_message(UI_MSG_ERR, NULL, err);
         return -1;
     }
 
-    time_t now = time(NULL);
-    char ts[12];
-    strftime(ts, sizeof(ts), "%I:%M:%S %p", localtime(&now));
-    printf("\033[32m[%s] You: %s\033[0m\n", ts, message); 
+    ui_push_message(UI_MSG_SELF, "you", message);
+    ui_stat_sent((size_t)sent);
     return 0;
 }
 
 int send_messages(const char* dest_ip, const char* one_shot) {
     int sock = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
     if (sock < 0) {
-        fprintf(stderr, "socket: %s  (are you running as root?)\n",
-                strerror(errno));
-        exit(1);
+        char err[160];
+        snprintf(err, sizeof(err),
+                 "socket: %s (run as root for raw ICMP)", strerror(errno));
+        ui_push_message(UI_MSG_ERR, NULL, err);
+        return 1;
     }
 
     struct sockaddr_in dest;
     memset(&dest, 0, sizeof(dest));
     dest.sin_family = AF_INET;
     if (inet_pton(AF_INET, dest_ip, &dest.sin_addr) != 1) {
-        fprintf(stderr, "Invalid destination IP: %s\n", dest_ip);
+        char err[128];
+        snprintf(err, sizeof(err), "invalid destination IP: %s", dest_ip);
+        ui_push_message(UI_MSG_ERR, NULL, err);
         close(sock);
-        exit(1);
+        return 1;
     }
 
     uint16_t seq = 1;
@@ -101,30 +102,22 @@ int send_messages(const char* dest_ip, const char* one_shot) {
     if (one_shot) {
         int rc = build_and_send(sock, &dest, one_shot, seq);
         close(sock);
-        exit(rc);
+        return rc;
     }
 
-    printf("Ping-Chat sender ready. Type a message and press Enter.\n");
-    printf("Sending to %s  (Ctrl-D or type QUIT to quit)\n\n", dest_ip);
-
+    char banner[160];
+    snprintf(banner, sizeof(banner), "sending to %s — type a message, enter to send", dest_ip);
+    ui_push_message(UI_MSG_SYS, NULL, banner);
 
     char *line;
-    while ((line = readline(">> ")) != NULL) {
-        if (strcmp(line, "QUIT") == 0) {
-            free(line);
-            break;
+    while ((line = ui_read_line()) != NULL) {
+        if (line[0] != '\0') {
+            build_and_send(sock, &dest, line, seq++);
         }
-        if (strlen(line) == 0) {
-            free(line);
-            continue;
-        }
-        add_history(line);
-        build_and_send(sock, &dest, line, seq++);
         free(line);
     }
 
-    printf("Goodbye.\n");
+    ui_push_message(UI_MSG_SYS, NULL, "goodbye.");
     close(sock);
     return 0;
 }
-
