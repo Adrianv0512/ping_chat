@@ -1,5 +1,6 @@
 CC      = gcc
-CFLAGS  = -Wall -Wextra -std=c11 -O2 -pthread
+CFLAGS  = -Wall -Wextra -std=c11 -O3 -pthread
+# CFLAGS  = -Wall -Wextra -std=c11 -O0 -pthread -g
 LDFLAGS = -lssl -lcrypto -lncursesw -pthread
 
 .PHONY: all clean

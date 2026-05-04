@@ -27,7 +27,7 @@ int build_and_send(int sock,
 {
 
     uint8_t buf[sizeof(struct icmp_header) + sizeof(struct pc_header)
-                + MAX_PAYLOAD];
+                + MAX_PAYLOAD + 16];
     memset(buf, 0, sizeof(buf));
 
     size_t msg_len = strlen(message);
@@ -56,7 +56,7 @@ int build_and_send(int sock,
     pch->frag_index  = htons(0);
     pch->payload_len = htons((uint16_t)msg_len);
 
-    uint8_t ciphertext[MAX_PAYLOAD];
+    uint8_t ciphertext[MAX_PAYLOAD + 16];
     int ct_len = my_encrypt((uint8_t *)message, (int)msg_len, g_key, ciphertext);
     memcpy(payload, ciphertext, ct_len);
     pch->payload_len = htons((uint16_t)ct_len);
@@ -108,7 +108,7 @@ int send_messages(const char* dest_ip, const char* one_shot) {
     char banner[160];
     snprintf(banner, sizeof(banner), "sending to %s — type a message, enter to send", dest_ip);
     ui_push_message(UI_MSG_SYS, NULL, banner);
-
+    build_and_send(sock, &dest, "Joined", seq++);
     char *line;
     while ((line = ui_read_line()) != NULL) {
         if (line[0] != '\0') {
@@ -116,7 +116,7 @@ int send_messages(const char* dest_ip, const char* one_shot) {
         }
         free(line);
     }
-
+    build_and_send(sock, &dest, "Left", seq++);
     ui_push_message(UI_MSG_SYS, NULL, "goodbye.");
     close(sock);
     return 0;
